@@ -1,0 +1,8 @@
+global-options: {}
+features:
+  drivers:
+    grpc: true
+    p4rt: true
+    thrift-driver: true
+architectures:
+  - tofino
