@@ -1,0 +1,120 @@
+#!/usr/bin/env python3
+
+# Copyright 2013-2021 Intel Corporation.
+#
+# This software and the related documents are Intel copyrighted materials,
+# and your use of them is governed by the express license under which they
+# were provided to you ("License"). Unless the License provides otherwise,
+# you may not use, modify, copy, publish, distribute, disclose or transmit this
+# software or the related documents without Intel's prior written permission.
+#
+# This software and the related documents are provided as is, with no
+# express or implied warranties, other than those that are expressly stated
+# in the License.
+
+import argparse
+import json
+import os.path
+
+template="""
+{
+    "chip_list": [
+        {
+        "id": "asic-0",
+            "chip_family": "",
+            "instance": 0,
+            "pcie_sysfs_prefix":
+                "/sys/devices/pci0000:00/0000:00:03.0/0000:05:00.0",
+            "pcie_domain": 0,
+            "pcie_bus": 5,
+            "pcie_fn": 0,
+            "pcie_dev":
+                0,
+            "pcie_int_mode":
+                1,
+            "sds_fw_path":
+                "share/tofino_sds_fw/avago/firmware"
+        }
+    ],
+    "instance": 0,
+    "p4_devices": [
+        {
+            "device-id": 0,
+            "p4_programs": [
+                {
+                    "program-name": "",
+                    "bfrt-config": "",
+                    "p4_pipelines": [ ]
+                }
+            ],
+            "agent0": "lib/libpltfm_mgr.so"
+        }
+    ]
+}
+"""
+
+def get_parser():
+    parser = argparse.ArgumentParser(description='STF conf file generator')
+    parser.add_argument('--testdir', help='Location of test outputs',
+                        type=str, action='store', required=True)
+    parser.add_argument('--installdir', help='Location of installed outputs',
+                        type=str, action='store', required=False)
+    parser.add_argument('--name', help='Name of P4 program under test',
+                        type=str, action='store', required=True)
+    parser.add_argument('--device', help='Target device', default='tofino',
+                        type=str, action='store', required=True)
+    parser.add_argument('--pipe', help='Pipeline Names',
+                        default='', nargs="+",
+                        type=str, required=True)
+    return parser
+
+def main():
+    MAX_PIPES = 4  # For now this is safe enough
+    args = get_parser().parse_args()
+    if args.installdir is None:
+        args.installdir = args.testdir
+    base_conf = json.loads(template)
+    # assume one chip
+    chip = base_conf["chip_list"][0]
+    chip["chip_family"] = args.device
+    # only support one device
+    p4_device = base_conf["p4_devices"][0]
+    # only support one program
+    p4_info = p4_device["p4_programs"][0]
+    p4_info["program-name"] = args.name
+    p4_pipelines=p4_info['p4_pipelines']
+    npipes = len(args.pipe)
+    for index, pipe in zip(list(range(npipes)),args.pipe):
+        pipe_config = {}
+        pipe_config["p4_pipeline_name"] = pipe
+        if 'switch_16' in args.testdir:
+            share_path = os.path.join(args.testdir, 'share', args.name, pipe)
+        else:
+            share_path = os.path.join(args.installdir, pipe)
+        pipe_config["context"] = os.path.join(share_path, 'context.json')
+        pipe_config["config"] = os.path.join(share_path, args.device + '.bin')
+        if 'tofino2' in args.device:
+            # Tofino-2 uses pipes 0,1 as external and 2,3 as internal
+            pipe_config["pipe_scope"] = [int(MAX_PIPES/npipes)*index+x for x in range(int(MAX_PIPES/npipes))]
+        else:
+            # Tofino-1 32Q folded pipe systems uses pipes 0,2 as the external pipes and 1,3 as the internal pipes
+            pipe_config["pipe_scope"] = [x*npipes+index for x in range(int(MAX_PIPES/npipes))]
+        pipe_config["path"] = args.installdir
+        p4_pipelines.append(pipe_config)
+
+    # Add bfrt-config and model_json_path for bf-switch
+    if 'switch_16' in args.testdir:
+        p4_info["switchapi"] = os.path.join(args.testdir, "lib", "libbf_switch.so")
+        p4_info["bfrt-config"] = os.path.join(args.testdir, 'share', args.name, 'bf-rt.json')
+        p4_info["model_json_path"] = os.path.join(args.testdir, 'share', args.name, 'aug_model.json')
+        p4_info["cpu_port"] = "veth251"
+    else:
+        p4_info["bfrt-config"] = os.path.join(args.installdir, 'bf-rt.json')
+
+    conf_name = os.path.join(args.testdir, args.name + '.conf')
+    with open(conf_name, 'w') as fconf:
+        json.dump(base_conf, fconf, indent=4, separators=(',', ': '))
+        fconf.write('\n')
+
+if __name__ == '__main__':
+    main()

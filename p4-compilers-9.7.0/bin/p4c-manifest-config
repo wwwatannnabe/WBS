@@ -1,0 +1,57 @@
+#! /usr/bin/env python3
+
+# Copyright 2013-2021 Intel Corporation.
+#
+# This software and the related documents are Intel copyrighted materials,
+# and your use of them is governed by the express license under which they
+# were provided to you ("License"). Unless the License provides otherwise,
+# you may not use, modify, copy, publish, distribute, disclose or transmit this
+# software or the related documents without Intel's prior written permission.
+#
+# This software and the related documents are provided as is, with no
+# express or implied warranties, other than those that are expressly stated
+# in the License.
+
+# Script to parse manifest.json
+
+import os
+import sys
+import argparse
+from packaging import version
+import json, jsonschema
+
+parser=argparse.ArgumentParser()
+
+parser.add_argument ("--pipe", action = 'store_true', default = None,
+                     help="return pipe names")
+
+parser.add_argument ("manifest_file", help="manifest.json to parse")
+opts = parser.parse_args()
+
+try:
+    manifest_json = json.load(open(opts.manifest_file, 'r'))
+    programs = manifest_json['programs']
+
+    if len(programs) != 1:
+        print("manifest-config only supports one program")
+        sys.exit(1)
+
+    schema_version = version.parse(manifest_json['schema_version'])
+    pipe_name_label = 'pipe_name'
+    if schema_version == version.parse("1.0.0"): pipe_name_label = 'pipe'
+
+    pipe_names = []
+    if schema_version < version.parse("2.0.0"):
+        pipelines = programs[0]['contexts']
+    else:
+        pipelines = programs[0]['pipes']
+
+    for pipeline in pipelines:
+        pipe_names.append(pipeline[pipe_name_label])
+
+    if opts.pipe is not None:
+        print(' '.join(pipe_names))
+        sys.exit(0)
+
+except Exception as e:
+    print(e)
