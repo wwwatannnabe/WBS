@@ -1,0 +1,11 @@
+bf-drivers : 9.7.0
+bf-syslibs : 9.7.0
+bf-utils : 9.7.0
+p4-compilers : 9.7.0
+tofino-model : 9.7.0
+p4-examples : 9.7.0
+ptf-modules : 9.7.0
+bf-diags : 9.7.0
+switch-p4-16 : 9.7.0
+p4i : 9.7.0
+p4o : 1.0
